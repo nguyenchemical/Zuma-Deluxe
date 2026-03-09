@@ -9,49 +9,14 @@
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700&display=swap');
-
-        :root { --gold: #ffd700; --jungle: #0a1f0a; }
-        
-        body, html { 
-            margin: 0; padding: 0; width: 100%; height: 100%; 
-            background: black; overflow: hidden; touch-action: none;
-            font-family: 'Cinzel', serif;
-        }
-
-        #game-wrapper {
-            position: relative; width: 100vw; height: 100vh;
-            display: flex; align-items: center; justify-content: center;
-            background: radial-gradient(circle, #1a3a1a 0%, #000 100%);
-        }
-
-        canvas { display: block; box-shadow: 0 0 50px rgba(0,0,0,1); }
-
-        .ui-layer {
-            position: absolute; top: env(safe-area-inset-top, 20px);
-            width: 90%; display: flex; justify-content: space-between;
-            pointer-events: none; z-index: 10;
-        }
-
-        .score-board {
-            color: var(--gold); font-size: 1.5rem; text-shadow: 2px 2px #000;
-            background: rgba(0,0,0,0.5); padding: 5px 20px; border: 2px solid var(--gold);
-        }
-
-        #screen-overlay {
-            position: absolute; inset: 0; background: rgba(0,0,0,0.85);
-            display: none; flex-direction: column; align-items: center; justify-content: center;
-            z-index: 100; text-align: center;
-        }
-
-        .zuma-btn {
-            background: linear-gradient(#ffd700, #b8860b);
-            color: #000; border: 3px solid #fff; padding: 15px 50px;
-            font-size: 1.8rem; font-family: 'Cinzel', serif; font-weight: bold;
-            cursor: pointer; border-radius: 10px; margin-top: 20px;
-            box-shadow: 0 0 20px var(--gold);
-        }
-
-        .zuma-btn:active { transform: scale(0.95); }
+        :root { --gold: #ffd700; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; touch-action: none; font-family: 'Cinzel', serif; }
+        #game-wrapper { position: relative; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle, #0d210d 0%, #000 100%); }
+        canvas { display: block; z-index: 1; }
+        .ui-layer { position: absolute; top: env(safe-area-inset-top, 20px); width: 90%; display: flex; justify-content: space-between; pointer-events: none; z-index: 10; }
+        .score-board { color: var(--gold); font-size: 1.2rem; text-shadow: 2px 2px #000; background: rgba(0,0,0,0.7); padding: 8px 15px; border: 2px solid var(--gold); border-radius: 5px; }
+        #screen-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.9); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
+        .zuma-btn { background: linear-gradient(#ffd700, #b8860b); color: #000; border: 3px solid #fff; padding: 12px 40px; font-size: 1.5rem; font-family: 'Cinzel', serif; font-weight: bold; cursor: pointer; border-radius: 10px; margin-top: 20px; box-shadow: 0 0 15px var(--gold); }
     </style>
 </head>
 <body>
@@ -61,112 +26,106 @@
         <div class="score-board" id="score-display">ĐIỂM: 0</div>
         <div class="score-board">ZUMA PC</div>
     </div>
-
     <div id="screen-overlay">
-        <h1 style="color: #ff3333; font-size: 4rem; margin: 0; text-shadow: 0 0 20px red;">BẠN ĐÃ THUA!</h1>
-        <p id="final-res" style="color: var(--gold); font-size: 2rem;"></p>
+        <h1 style="color: #ff3333; font-size: 3rem; margin: 0;">KẾT THÚC</h1>
+        <p id="final-res" style="color: var(--gold); font-size: 1.5rem;"></p>
         <button class="zuma-btn" onclick="initGame()">CHƠI LẠI</button>
     </div>
-
     <canvas id="gameCanvas"></canvas>
 </div>
 
 <script>
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    let audioCtx = null;
 
     let width, height, centerX, centerY, orbitRadius;
-    let balls, bullets, particles, score, isRunning, frogAngle, currentBallColor, spawnTimer;
+    let balls, bullets, score, isRunning, frogAngle, currentBallColor, spawnTimer;
     const colors = ['#ff0000', '#00ff00', '#0066ff', '#ffff00', '#ff00ff'];
 
+    function initAudio() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+    }
+
     function playZumaSound(type) {
+        if (!audioCtx) return;
         if (audioCtx.state === 'suspended') audioCtx.resume();
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.connect(gain); gain.connect(audioCtx.destination);
-
-        if (type === 'fire') { // Tiếng súng PC
+        if (type === 'fire') {
             osc.type = 'square';
             osc.frequency.setValueAtTime(150, audioCtx.currentTime);
             osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.1);
-            gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
             osc.start(); osc.stop(audioCtx.currentTime + 0.1);
-        } else if (type === 'hit') { // Tiếng nổ bi PC
+        } else if (type === 'hit') {
             osc.type = 'sine';
             osc.frequency.setValueAtTime(400, audioCtx.currentTime);
             osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
-            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
             osc.start(); osc.stop(audioCtx.currentTime + 0.1);
         }
     }
 
     function resize() {
-        width = window.innerWidth; height = window.innerHeight;
-        canvas.width = width; canvas.height = height;
-        centerX = width / 2; centerY = height / 2;
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+        centerX = width / 2;
+        centerY = height / 2;
         orbitRadius = Math.min(width, height) * 0.4;
     }
 
     function initGame() {
-        // Reset sạch sẽ bộ nhớ
-        balls = []; bullets = []; particles = [];
+        initAudio();
+        balls = []; bullets = [];
         score = 0; spawnTimer = 0; frogAngle = 0;
         isRunning = true;
         currentBallColor = colors[Math.floor(Math.random() * colors.length)];
-        
         document.getElementById('screen-overlay').style.display = 'none';
         document.getElementById('score-display').innerText = "ĐIỂM: 0";
-        
         resize();
+        gameLoop(); // Bắt đầu vòng lặp ngay khi khởi tạo
     }
 
     function drawFrog() {
         ctx.save();
         ctx.translate(centerX, centerY);
         ctx.rotate(frogAngle + Math.PI / 2);
-
-        // Body Ếch (Giống PC 100%)
-        ctx.fillStyle = '#1b5e20';
+        // Thân ếch
+        ctx.fillStyle = '#2e7d32';
         ctx.beginPath();
-        ctx.moveTo(-30, 20); ctx.quadraticCurveTo(0, 50, 30, 20);
-        ctx.lineTo(25, -30); ctx.quadraticCurveTo(0, -50, -25, -30);
+        ctx.ellipse(0, 0, 35, 40, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.strokeStyle = 'gold'; ctx.lineWidth = 2; ctx.stroke();
-
         // Mắt
         ctx.fillStyle = 'white';
-        ctx.beginPath(); ctx.arc(-18, -35, 10, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(18, -35, 10, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = 'black';
-        ctx.beginPath(); ctx.arc(-18, -38, 5, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(18, -38, 5, 0, Math.PI*2); ctx.fill();
-
+        ctx.beginPath(); ctx.arc(-15, -30, 8, 0, 2*Math.PI); ctx.fill();
+        ctx.beginPath(); ctx.arc(15, -30, 8, 0, 2*Math.PI); ctx.fill();
         // Bi trong miệng
         ctx.fillStyle = currentBallColor;
-        ctx.beginPath(); ctx.arc(0, -35, 14, 0, Math.PI*2); ctx.fill();
-        ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.stroke();
-
+        ctx.beginPath(); ctx.arc(0, -30, 14, 0, 2*Math.PI); ctx.fill();
         ctx.restore();
     }
 
     function update() {
         if (!isRunning) return;
-
         if (spawnTimer-- <= 0) {
             balls.push({ angle: -Math.PI / 2, color: colors[Math.floor(Math.random() * colors.length)] });
-            spawnTimer = 40;
+            spawnTimer = 50;
         }
-
         balls.forEach((ball, bIdx) => {
-            ball.angle += 0.006;
+            ball.angle += 0.007;
             if (ball.angle >= 1.5 * Math.PI) {
                 isRunning = false;
                 document.getElementById('screen-overlay').style.display = 'flex';
                 document.getElementById('final-res').innerText = "TỔNG ĐIỂM: " + score;
             }
         });
-
         bullets.forEach((bullet, bltIdx) => {
             bullet.x += bullet.vx; bullet.y += bullet.vy;
             balls.forEach((ball, bIdx) => {
@@ -182,34 +141,36 @@
                     bullets.splice(bltIdx, 1);
                 }
             });
+            if (bullet.x < 0 || bullet.x > width || bullet.y < 0 || bullet.y > height) bullets.splice(bltIdx, 1);
         });
     }
 
     function draw() {
         ctx.clearRect(0, 0, width, height);
-
-        // Vẽ đường ray cổ điển
+        // Quỹ đạo
         ctx.beginPath();
         ctx.arc(centerX, centerY, orbitRadius, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(255,215,0,0.1)'; ctx.lineWidth = 40; ctx.stroke();
-        ctx.strokeStyle = 'gold'; ctx.lineWidth = 2; ctx.stroke();
-
+        ctx.strokeStyle = 'rgba(212, 175, 55, 0.2)'; ctx.lineWidth = 30; ctx.stroke();
+        
         drawFrog();
-
         balls.forEach(ball => {
             const x = centerX + Math.cos(ball.angle) * orbitRadius;
             const y = centerY + Math.sin(ball.angle) * orbitRadius;
             ctx.fillStyle = ball.color;
             ctx.beginPath(); ctx.arc(x, y, 15, 0, Math.PI*2); ctx.fill();
-            ctx.strokeStyle = 'white'; ctx.stroke();
+            ctx.strokeStyle = '#fff'; ctx.stroke();
         });
-
         bullets.forEach(blt => {
             ctx.fillStyle = blt.color;
             ctx.beginPath(); ctx.arc(blt.x, blt.y, 15, 0, Math.PI*2); ctx.fill();
         });
+    }
 
-        if (isRunning) requestAnimationFrame(() => { update(); draw(); });
+    function gameLoop() {
+        if (!isRunning) return;
+        update();
+        draw();
+        requestAnimationFrame(gameLoop);
     }
 
     function handleInput(e) {
@@ -217,8 +178,8 @@
         const x = e.clientX || (e.touches ? e.touches[0].clientX : 0);
         const y = e.clientY || (e.touches ? e.touches[0].clientY : 0);
         frogAngle = Math.atan2(y - centerY, x - centerX);
-
         if (e.type === 'mousedown' || e.type === 'touchstart') {
+            initAudio();
             bullets.push({
                 x: centerX, y: centerY,
                 vx: Math.cos(frogAngle) * 15, vy: Math.sin(frogAngle) * 15,
@@ -234,9 +195,8 @@
     window.addEventListener('touchstart', (e) => { handleInput(e); e.preventDefault(); }, {passive: false});
     window.addEventListener('resize', resize);
 
-    // Bắt đầu game lần đầu
+    // Tự động chạy khi load trang
     window.onload = initGame;
-    draw(); // Kích hoạt vòng lặp vẽ
 </script>
 </body>
 </html>
